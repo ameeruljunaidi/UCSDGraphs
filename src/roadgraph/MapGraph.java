@@ -11,6 +11,7 @@ import java.util.*;
 import java.util.function.Consumer;
 
 import geography.GeographicPoint;
+import geography.RoadSegment;
 import util.GraphLoader;
 
 /**
@@ -20,8 +21,14 @@ import util.GraphLoader;
  * Nodes in the graph are intersections between
  */
 public class MapGraph {
-    //TODO: Add your member variables here in WEEK 3
-    private Map<GeographicPoint, List<GeographicPoint>> adjListMap;
+    /**
+     * Chose to represent the graph as an adjacency list rather than an adjacency matrix because the edges are sparse.
+     * Also chose to represent the edges as a RoadSegment since it is already an object that supports storing the
+     * name of the street, type of street, as well as the distance between two points.
+     * The List of GeographicPoints stored in the RoadSegment is not use in the BFS implementation, however.
+     * Nor does the name, type, and distance - they are all ignored in the BFS implementation.
+     */
+    private final Map<GeographicPoint, List<RoadSegment>> adjListMap;
 
     /**
      * Create a new empty MapGraph
@@ -90,16 +97,11 @@ public class MapGraph {
 
         if (!adjListMap.containsKey(to) || !adjListMap.containsKey(from)) throw new IllegalArgumentException();
 
-        List<GeographicPoint> updateFrom = adjListMap.get(from);
-        if (!updateFrom.contains(to)) updateFrom.add(to);
-        adjListMap.put(from, updateFrom);
-
-        List<GeographicPoint> updateTo = adjListMap.get(to);
-        if (!updateTo.contains(from)) updateTo.add(from);
-        adjListMap.put(to, updateTo);
-
+        RoadSegment roadSegment = new RoadSegment(from, to, new ArrayList<>(), roadName, roadType, length);
+        List<RoadSegment> roadSegments = adjListMap.get(from);
+        if (!roadSegments.contains(roadSegment)) roadSegments.add(roadSegment);
+        adjListMap.put(from, roadSegments);
     }
-
 
     /**
      * Find the path from start to goal using breadth first search
@@ -117,47 +119,54 @@ public class MapGraph {
     }
 
     /**
-     * Find the path from start to goal using breadth first search
+     * Find the path from start to goal using breadth first search.
+     * The queue used on this breadth first search with store a List of GeographicPoints that keep tracks of the path
+     * from start to end (not necessarily the goal).
+     * If the last element in that List is a GeographicPoint that equals to goal, then simply return that list.
+     * When processing the element in the queue, we are only concerned with the last element in the List, which will
+     * be called the currentVertex.
      *
      * @param start        The starting location
      * @param goal         The goal location
      * @param nodeSearched A hook for visualization.  See assignment instructions for how to use it.
-     * @return The list of intersections that form the shortest (unweighted)
-     * path from start to goal (including both start and goal).
+     * @return The list of intersections that form the shortest (unweighted) path from start to goal (including both
+     * start and goal).
      */
     public List<GeographicPoint> bfs(GeographicPoint start, GeographicPoint goal,
                                      Consumer<GeographicPoint> nodeSearched) {
-        // TODO: Implement this method in WEEK 3
 
-        Queue<GeographicPoint> queue = new LinkedList<>();
+        List<GeographicPoint> startingPath = new ArrayList<>();
+        startingPath.add(start);
+
+        Queue<List<GeographicPoint>> queue = new LinkedList<>();
+        queue.add(startingPath);
+
         Set<GeographicPoint> visited = new HashSet<>();
-        queue.add(start);
         visited.add(start);
 
-        boolean found = false;
-        while (!queue.isEmpty() && !found) {
-            GeographicPoint current = queue.poll();
-            List<GeographicPoint> neighbors = adjListMap.get(current);
+        while (!queue.isEmpty()) {
+            List<GeographicPoint> currentPath = queue.poll();
+            GeographicPoint currentVertex = currentPath.get(currentPath.size() - 1);
+            List<RoadSegment> currentVertexNeighborsRoadSegment = adjListMap.get(currentVertex);
 
-            for (GeographicPoint neighbor : neighbors) {
-                if (visited.contains(neighbor)) continue;
+            for (RoadSegment currentNeighborRoadSegment : currentVertexNeighborsRoadSegment) {
+                GeographicPoint currentNeighborVertex = currentNeighborRoadSegment.getOtherPoint(currentVertex);
 
-                queue.add(neighbor);
-                nodeSearched.accept(neighbor);
+                if (visited.contains(currentNeighborVertex)) continue;
+                visited.add(currentNeighborVertex);
 
-                if (neighbor.equals(goal)) {
-                    found = true;
-                    break;
-                }
+                List<GeographicPoint> newPath = new ArrayList<>(currentPath);
+                newPath.add(currentNeighborVertex);
+
+                if (currentNeighborVertex.equals(goal)) return newPath;
+                queue.add(newPath);
+
+                nodeSearched.accept(currentNeighborVertex);
             }
         }
 
-        // Hook for visualization.  See writeup.
-        //nodeSearched.accept(next.getLocation());
-
         return null;
     }
-
 
     /**
      * Find the path from start to goal using Dijkstra's algorithm
@@ -232,8 +241,9 @@ public class MapGraph {
     public static void main(String[] args) {
         System.out.print("Making a new map...");
         MapGraph firstMap = new MapGraph();
-        System.out.print("DONE. \nLoading the map...");
+        System.out.println("DONE. \nLoading the map...");
         GraphLoader.loadRoadMap("data/testdata/simpletest.map", firstMap);
+        System.out.println(firstMap.getNumEdges());
         System.out.println("DONE.");
 
         // You can use this method for testing.
